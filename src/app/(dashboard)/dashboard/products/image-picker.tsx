@@ -9,8 +9,9 @@ const MAX_IMAGE_BYTES = 750_000;
 export function ProductImagePicker({ initialValue = "" }: { initialValue?: string }) {
   const [preview, setPreview] = useState(initialValue);
   const [error, setError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
-  function handleChange(file: File | undefined) {
+  async function handleChange(file: File | undefined) {
     setError("");
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -21,12 +22,30 @@ export function ProductImagePicker({ initialValue = "" }: { initialValue?: strin
       setError("Image must be smaller than 750 KB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result || "");
-      setPreview(value);
-    };
-    reader.readAsDataURL(file);
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "products");
+
+      const response = await fetch("/api/uploads", {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = (await response.json()) as { ok?: boolean; error?: string; url?: string };
+      if (!response.ok || !payload.ok || !payload.url) {
+        throw new Error(payload.error || "Image upload failed.");
+      }
+
+      setPreview(payload.url);
+    } catch (uploadError) {
+      setPreview("");
+      setError(uploadError instanceof Error ? uploadError.message : "Image upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   return (
@@ -37,8 +56,9 @@ export function ProductImagePicker({ initialValue = "" }: { initialValue?: strin
         name="imageFile"
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif"
-        onChange={(event) => handleChange(event.target.files?.[0])}
+        onChange={(event) => void handleChange(event.target.files?.[0])}
         className="h-auto py-2"
+        disabled={isUploading}
       />
       <input type="hidden" name="imageUrl" value={preview} readOnly />
       {preview && (
@@ -54,6 +74,7 @@ export function ProductImagePicker({ initialValue = "" }: { initialValue?: strin
         </div>
       )}
       {error && <p className="text-[12px] text-danger">{error}</p>}
+      {isUploading && <p className="text-[12px] text-muted-foreground">Uploading image…</p>}
       <p className="text-[12px] text-muted-foreground">JPG, PNG, WEBP, or GIF up to 750 KB.</p>
     </div>
   );

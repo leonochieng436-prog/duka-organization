@@ -23,10 +23,14 @@ const decimalString = (label: string, opts?: { allowZero?: boolean }) =>
 
 const imageDataUrl = z
   .string()
-  .max(1_500_000, "Image must be smaller than 1 MB")
+  .max(2048, "Image URL is too long")
   .refine(
-    (value) => value === "" || /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value),
-    "Upload a JPG, PNG, WEBP, or GIF image"
+    (value) =>
+      value === "" ||
+      /^https?:\/\/[^\s]+$/.test(value) ||
+      /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value) ||
+      /^[A-Za-z0-9._\-/]+$/.test(value),
+    "Upload a valid JPG, PNG, WEBP, or GIF image URL"
   );
 
 /**

@@ -472,6 +472,10 @@ export async function createProduct(
     }
     const input = parsed.data;
 
+    if (input.imageUrl && input.imageUrl.startsWith("data:image/")) {
+      return { ok: false, error: "Product images must be uploaded via the server image upload flow before saving." };
+    }
+
     const [category, brand, supplier, taxRate, warehouse] = await Promise.all([
       input.categoryId ? ctx.db.category.findFirst({ where: { id: input.categoryId } }) : null,
       input.brandId ? ctx.db.brand.findFirst({ where: { id: input.brandId } }) : null,
@@ -585,6 +589,11 @@ export async function updateProduct(raw: unknown): Promise<ActionResult<undefine
       };
     }
     const input = parsed.data;
+
+    if (input.imageUrl && input.imageUrl.startsWith("data:image/")) {
+      return { ok: false, error: "Product images must be uploaded via the server image upload flow before saving." };
+    }
+
     const product = await ctx.db.product.findFirst({ where: { id: input.productId } });
     if (!product) return { ok: false, error: "Product not found." };
     const [category, brand, supplier] = await Promise.all([
