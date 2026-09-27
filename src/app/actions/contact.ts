@@ -82,7 +82,7 @@ export async function submitContactEnquiry(raw: unknown) {
         `,
         cta: {
           label: "Open DukaOS",
-          url: process.env.NEXT_PUBLIC_APP_URL ?? "https://dukaos.com",
+          url: process.env.NEXT_PUBLIC_APP_URL ?? "https://dukaos-organization.vercel.app",
         },
       }),
       replyTo: input.email,

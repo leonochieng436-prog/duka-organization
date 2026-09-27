@@ -539,7 +539,7 @@ const schemaMarkup = {
   publisher: {
     "@type": "Organization",
     name: "DukaOS",
-    sameAs: "https://dukaos.com",
+    sameAs: "https://dukaos-organization.vercel.app",
   },
   areaServed: "Kenya",
 };

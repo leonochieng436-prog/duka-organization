@@ -64,7 +64,7 @@ npm run db:seed       # seed the global permission catalog + demo tenant
 npm run dev
 ```
 
-Visit `http://localhost:3000`. Either register a new business, or log
+Visit `https://dukaos-organization.vercel.app`. Either register a new business, or log
 in with the seeded demo account (`owner@leonretail.co.ke`).
 
 ### 6. Tests

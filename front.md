@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in a browser. Use **Get started** or **Start your workspace** to open `/register`, or **Log in** to open `/login`.
+Open [https://dukaos-organization.vercel.app](https://dukaos-organization.vercel.app) in a browser. Use **Get started** or **Start your workspace** to open `/register`, or **Log in** to open `/login`.
 
 ## Registration and activation flow
 
