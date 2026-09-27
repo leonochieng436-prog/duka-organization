@@ -6,7 +6,7 @@ DIRECT_URL="postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require"
 
 # ── Auth ──────────────────────────────────────────────────
 AUTH_SECRET="replace-with-a-random-secret"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="https://dukaos-organization.vercel.app"
 
 # ── M-Pesa (Safaricom Daraja) ─────────────────────────────
 # Stored per-organization in DB in production; these are fallback/dev values.
