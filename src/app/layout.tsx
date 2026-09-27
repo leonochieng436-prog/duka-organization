@@ -30,7 +30,9 @@ export const metadata: Metadata = {
     "DukaOS is a modern POS, inventory, purchases, customer credit, supplier, and reporting system built for growing Kenyan retail and service businesses.",
   applicationName: "DukaOS",
   keywords: [
-    "POS system Kenya",
+    "POS system in Kenya",
+    "POS software Kenya",
+    "Best POS in Kenya",
     "inventory management software Kenya",
     "retail POS Kenya",
     "business management system Kenya",
