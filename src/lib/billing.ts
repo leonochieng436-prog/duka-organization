@@ -1,6 +1,11 @@
 import Decimal from "decimal.js";
 
 export const UNLIMITED_LIMIT = 999;
+export const FREE_TRIAL_DAYS = 7;
+
+export function getTrialEndDate(start = new Date()): Date {
+  return new Date(start.getTime() + FREE_TRIAL_DAYS * 86_400_000);
+}
 
 const SHARED_FEATURES = {
   pos: true,

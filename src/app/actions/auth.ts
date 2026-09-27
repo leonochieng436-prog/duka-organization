@@ -15,7 +15,7 @@ import {
 } from "@/server/services/organization";
 import { uniqueOrgSlug } from "@/lib/slug";
 import { randomBytes, createHash } from "crypto";
-import { planLimits, type Plan } from "@/lib/billing";
+import { getTrialEndDate, planLimits, type Plan } from "@/lib/billing";
 import {
   registerOrganizationSchema,
   loginSchema,
@@ -104,14 +104,16 @@ export async function registerOrganization(
       },
     });
 
+    const trial = input.purchaseMode === "trial";
     await tx.subscription.create({
       data: {
         organizationId: org.id,
         plan: input.plan,
-        status: "pending_payment",
+        status: trial ? "trialing" : "pending_payment",
         branchLimit: planLimits(input.plan as Plan).branchLimit,
         registerLimit: planLimits(input.plan as Plan).registerLimit,
         userLimit: planLimits(input.plan as Plan).userLimit,
+        trialEndsAt: trial ? getTrialEndDate() : null,
       },
     });
 
@@ -136,6 +138,7 @@ export async function registerOrganization(
   });
 
   const planName = input.plan.charAt(0).toUpperCase() + input.plan.slice(1);
+  const trial = input.purchaseMode === "trial";
   const notificationFailures: string[] = [];
 
   try {
@@ -150,7 +153,7 @@ export async function registerOrganization(
         `Phone: ${result.org.phone ?? "Not provided"}`,
         `Business type: ${result.org.businessType}`,
         `Package: ${planName}`,
-        "Status: Pending payment confirmation",
+        trial ? "Status: 7-day free trial" : "Status: Pending payment confirmation",
       ].join("\n"),
     });
   } catch (error) {
@@ -163,12 +166,16 @@ export async function registerOrganization(
       channel: "email",
       recipient: result.user.email,
       subject: `Welcome to DukaOS, ${result.org.name}`,
-      message: `Welcome to DukaOS, ${result.user.name}. Your ${result.org.name} workspace is ready and waiting for payment confirmation.\n\nLogin email: ${result.user.email}\nPassword: ${input.password}\nPackage: ${planName}\n\nSign in at ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login after your account is activated.`,
+      message: trial
+        ? `Welcome to DukaOS, ${result.user.name}. Your ${result.org.name} workspace is ready with a 7-day free trial.\n\nLogin email: ${result.user.email}\nPassword: ${input.password}\nPackage: ${planName}\n\nSign in at ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login to get started.`
+        : `Welcome to DukaOS, ${result.user.name}. Your ${result.org.name} workspace is ready and awaiting payment confirmation.\n\nLogin email: ${result.user.email}\nPassword: ${input.password}\nPackage: ${planName}\n\nPayment instructions will be shared before your workspace is activated.`,
       html: brandedEmail({
         preheader: `Your ${result.org.name} workspace is ready.`,
         eyebrow: "Welcome to DukaOS",
         title: "Your business workspace is ready",
-        body: `<p>Hi ${escapeHtml(result.user.name)},</p><p>Your <strong>${escapeHtml(result.org.name)}</strong> workspace has been created successfully. It is currently waiting for payment confirmation before your dashboard is activated.</p><div style="margin:24px 0;padding:18px 20px;background:#f3faf7;border:1px solid #d9eae4;border-radius:8px"><p style="margin:0 0 10px;color:#102b4e;font-weight:bold">Your login credentials</p><p style="margin:0;line-height:1.8">Email: <strong>${escapeHtml(result.user.email)}</strong><br>Password: <strong>${escapeHtml(input.password)}</strong><br>Package: <strong>${escapeHtml(planName)}</strong></p></div><p>Keep these credentials private. We will activate your workspace once payment has been confirmed.</p>`,
+        body: trial
+          ? `<p>Hi ${escapeHtml(result.user.name)},</p><p>Your <strong>${escapeHtml(result.org.name)}</strong> workspace has been created successfully. You have a 7-day free trial and can start using your dashboard immediately.</p><div style="margin:24px 0;padding:18px 20px;background:#f3faf7;border:1px solid #d9eae4;border-radius:8px"><p style="margin:0 0 10px;color:#102b4e;font-weight:bold">Your login credentials</p><p style="margin:0;line-height:1.8">Email: <strong>${escapeHtml(result.user.email)}</strong><br>Password: <strong>${escapeHtml(input.password)}</strong><br>Package: <strong>${escapeHtml(planName)}</strong></p></div><p>Keep these credentials private. Choose a paid plan before your trial ends to continue without interruption.</p>`
+          : `<p>Hi ${escapeHtml(result.user.name)},</p><p>Your <strong>${escapeHtml(result.org.name)}</strong> workspace has been created and is awaiting payment confirmation.</p><div style="margin:24px 0;padding:18px 20px;background:#f3faf7;border:1px solid #d9eae4;border-radius:8px"><p style="margin:0 0 10px;color:#102b4e;font-weight:bold">Your registration</p><p style="margin:0;line-height:1.8">Email: <strong>${escapeHtml(result.user.email)}</strong><br>Package: <strong>${escapeHtml(planName)}</strong></p></div><p>Payment instructions will be shared before your workspace is activated.</p>`,
         cta: { label: "Open DukaOS", url: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/login` },
       }),
     });
@@ -179,7 +186,7 @@ export async function registerOrganization(
 
   return {
     ok: true,
-    data: { redirectTo: "/account-pending" },
+    data: { redirectTo: trial ? "/dashboard" : "/account-pending" },
     ...(notificationFailures.length > 0 ? { warnings: notificationFailures } : {}),
   };
 }

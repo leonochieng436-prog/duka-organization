@@ -44,6 +44,7 @@ export function RegisterForm() {
       businessType: String(formData.get("businessType") || "general_store"),
       country: "KE",
       plan: String(formData.get("plan") || "starter"),
+      purchaseMode: String(formData.get("purchaseMode") || "trial"),
     };
 
     startTransition(async () => {
@@ -84,6 +85,20 @@ export function RegisterForm() {
         )}
       </div>
 
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium">How would you like to start?</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex cursor-pointer gap-3 rounded-[var(--radius-sm)] border border-primary/40 bg-primary/5 p-3 has-[:checked]:ring-2 has-[:checked]:ring-primary">
+            <input type="radio" name="purchaseMode" value="trial" defaultChecked className="mt-1 accent-primary" />
+            <span><span className="block text-sm font-medium">Start free trial</span><span className="mt-1 block text-xs text-muted-foreground">Use the selected package for 7 days, no payment required.</span></span>
+          </label>
+          <label className="flex cursor-pointer gap-3 rounded-[var(--radius-sm)] border border-border p-3 has-[:checked]:ring-2 has-[:checked]:ring-primary">
+            <input type="radio" name="purchaseMode" value="direct" className="mt-1 accent-primary" />
+            <span><span className="block text-sm font-medium">Purchase directly</span><span className="mt-1 block text-xs text-muted-foreground">Request payment instructions and activate after confirmation.</span></span>
+          </label>
+        </div>
+      </fieldset>
+
       <div className="space-y-2">
         <Label htmlFor="businessType">Business type</Label>
         <select
@@ -116,7 +131,7 @@ export function RegisterForm() {
           ))}
         </select>
         <p className="text-[12px] text-muted-foreground">
-          You will receive payment instructions after registration. Your account starts after confirmation.
+          Start with a 7-day free trial. Your workspace opens immediately, with no payment required during the trial.
         </p>
       </div>
 
