@@ -5,6 +5,8 @@ import { z } from "zod";
 import { assertOwner, assertPermission, requireAuthContext, AuthError } from "@/server/auth/context";
 import { recordAudit } from "@/server/services/audit";
 import type { ActionResult } from "./auth";
+import { etimsConfigurationSchema } from "@/lib/etims/validation";
+import { encryptEtimsSecret } from "@/server/services/etims-encryption";
 
 const businessProfileSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -54,4 +56,26 @@ export async function updateNotificationSettings(raw: unknown): Promise<ActionRe
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "NOTIFICATION_SETTINGS_UPDATED", entityType: "NotificationSetting", metadata: { events: parsed.data.map((item) => item.eventKey) } });
     revalidatePath("/dashboard/settings"); return { ok: true, data: undefined };
   } catch (error) { if (error instanceof AuthError) return { ok: false, error: error.message }; throw error; }
+}
+
+export async function updateEtimsConfiguration(raw: unknown): Promise<ActionResult<undefined>> {
+  try {
+    const ctx = await requireAuthContext();
+    assertPermission(ctx, "ETIMS_CONFIGURE");
+    assertOwner(ctx);
+    const parsed = etimsConfigurationSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, error: "Please enter valid eTIMS settings." };
+    const input = parsed.data;
+    const enabled = input.enabled;
+    const secret = input.clientSecret?.trim();
+    const existing = await ctx.db.etimsConfiguration.findUnique({ where: { organizationId: ctx.organizationId } });
+    await ctx.db.etimsConfiguration.upsert({
+      where: { organizationId: ctx.organizationId },
+      update: { enabled, status: enabled ? "CONFIGURING" : "DISABLED", completionMode: input.completionMode, environment: input.environment || null, apiUrl: input.apiUrl || null, clientId: input.clientId || null, ...(secret ? { encryptedSecret: encryptEtimsSecret(secret) } : {}), businessPin: input.businessPin || null, invoicePrefix: input.invoicePrefix || null, taxInclusive: input.taxInclusive, lastError: null },
+      create: { organizationId: ctx.organizationId, enabled, status: enabled ? "CONFIGURING" : "DISABLED", completionMode: input.completionMode, environment: input.environment || null, apiUrl: input.apiUrl || null, clientId: input.clientId || null, encryptedSecret: secret ? encryptEtimsSecret(secret) : null, businessPin: input.businessPin || null, invoicePrefix: input.invoicePrefix || null, taxInclusive: input.taxInclusive },
+    });
+    await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: enabled ? "ETIMS_ENABLED" : "ETIMS_DISABLED", entityType: "EtimsConfiguration", entityId: existing?.id, metadata: { completionMode: input.completionMode, environment: input.environment || null } });
+    revalidatePath("/dashboard/settings");
+    return { ok: true, data: undefined };
+  } catch (error) { if (error instanceof AuthError) return { ok: false, error: error.message }; return { ok: false, error: error instanceof Error ? error.message : "Could not update eTIMS settings." }; }
 }

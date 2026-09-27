@@ -31,6 +31,7 @@ const NAV: DashboardNavItem[] = [
   { href: "/dashboard/credit", label: "Credit", icon: "customers" },
   { href: "/dashboard/customers", label: "Customers", icon: "customers" },
   { href: "/dashboard/invoices", label: "Invoices", icon: "invoices" },
+  { href: "/dashboard/tax-compliance/etims", label: "Tax & Compliance", icon: "invoices" },
   { href: "/dashboard/expenses", label: "Expenses", icon: "expenses" },
   { href: "/dashboard/reports", label: "Reports", icon: "reports" },
   { href: "/dashboard/billing", label: "Billing", icon: "billing" },

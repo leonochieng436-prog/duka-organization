@@ -34,6 +34,7 @@ const SETTINGS_GROUPS = [
     items: [
       { href: "/dashboard/settings?section=payments", label: "Payments", description: "Payment methods and providers", icon: "payments", permission: "SETTINGS_MANAGE", available: true },
       { href: "/dashboard/settings?section=taxes", label: "Taxes", description: "Tax rates and financial rules", icon: "taxes", permission: "SETTINGS_MANAGE", available: true },
+      { href: "/dashboard/settings?section=etims", label: "Tax & Compliance", description: "Optional eTIMS integration", icon: "taxes", permission: "ETIMS_VIEW", available: true },
       { href: "/dashboard/settings?section=receipts", label: "Receipts & invoices", description: "Receipt format and branding", icon: "receipts", permission: "SETTINGS_MANAGE", available: true },
       { href: "/dashboard/settings?section=notifications", label: "Notifications", description: "Alerts and business summaries", icon: "notifications", permission: "SETTINGS_MANAGE", available: true },
       { href: "/dashboard/settings?section=integrations", label: "Integrations", description: "Connected services", icon: "integrations", permission: "SETTINGS_MANAGE", available: true },

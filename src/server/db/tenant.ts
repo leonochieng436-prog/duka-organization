@@ -59,6 +59,9 @@ export const TENANT_MODELS = [
   "cashSession",
   "saleReturn",
   "subscription",
+  "etimsConfiguration",
+  "etimsInvoice",
+  "etimsSubmission",
 ] as const;
 
 type TenantModel = (typeof TENANT_MODELS)[number];

@@ -41,6 +41,11 @@ export async function provisionDefaultSettings(tx: Tx, organizationId: string) {
     data: DEFAULT_NOTIFICATION_EVENTS.map((eventKey) => ({ organizationId, eventKey })),
     skipDuplicates: true,
   });
+  await tx.etimsConfiguration.upsert({
+    where: { organizationId },
+    update: {},
+    create: { organizationId, enabled: false, status: "DISABLED", completionMode: "QUEUE_FOR_SYNC" },
+  });
 }
 
 export async function provisionSystemRoles(tx: Tx, organizationId: string) {

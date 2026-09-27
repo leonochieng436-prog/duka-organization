@@ -29,8 +29,11 @@ The repository currently contains working functionality for:
 - Reports, analytics, and CSV exports
 - Audit logging
 - Subscription scaffolding
+- Optional eTIMS configuration, tax-aware sale snapshots, submission queue, retry records, and compliance dashboard
 
 Some areas remain partial or planned, especially external payment integrations, advanced stock counting/approval workflows, complete transfer state management, automated notifications, and production billing logic. Features should not be treated as complete merely because their database models exist.
+
+The eTIMS module is also deliberately partial until the official KRA eTIMS adapter contract is installed and verified. DukaOS does not invent KRA endpoints, payloads, tax codes, or compliance responses.
 
 ## 3. High-level module flow
 
@@ -342,6 +345,57 @@ A user opens a cash session for a branch and register before selling. The sessio
 
 After a successful sale, the POS routes to the receipt page. Receipts use sale-item snapshots so later product edits do not change historical receipt content. Receipt notes can be updated through a protected action, and receipts can be printed or opened for download/rendering.
 
+### Optional eTIMS workflow
+
+eTIMS is an organization-level optional integration. New organizations are provisioned with:
+
+```text
+enabled = false
+status = DISABLED
+completionMode = QUEUE_FOR_SYNC
+```
+
+Businesses that do not need electronic tax invoicing continue through the normal POS path:
+
+```text
+Sale -> Payment -> Complete sale -> DukaOS receipt
+```
+
+Businesses that enable eTIMS use this path:
+
+```text
+Sale
+  |
+  +-- DukaOS sale, inventory movement, payment, and receipt
+  |
+  +-- eTIMS invoice snapshot
+          |
+          +-- Idempotent submission queue
+                  |
+                  +-- Pending -> Submitted/Accepted
+                  +-- Failed/Rejected -> Retry
+```
+
+The sale transaction does not depend on an eTIMS network request when the completion mode is `QUEUE_FOR_SYNC`. A temporary outage therefore does not lose or duplicate the DukaOS sale. The queue uses `sale:<saleId>` as its idempotency key and stores attempt count, last attempt, next retry time, error message, response reference, and response data.
+
+The available completion modes are:
+
+- `NORMAL`: complete the DukaOS sale without creating an eTIMS submission.
+- `QUEUE_FOR_SYNC`: complete the sale and create a pending eTIMS invoice for later synchronization.
+- `BLOCK_COMPLETION`: intended for verified official adapters; currently refuses completion until that adapter is installed and verified.
+
+Tax is recalculated on the server from the product variant's configured `TaxRate`. Client totals and prices are not trusted. The eTIMS invoice stores a snapshot of sale lines, tax rates, tax amounts, totals, organization, branch, and sale ID so later product edits do not rewrite historical tax data.
+
+### eTIMS configuration workflow
+
+An owner with `ETIMS_CONFIGURE` opens **Settings -> Tax & Compliance** and configures the organization-level integration. The UI supports enabling/disabling the module, environment, adapter URL, client ID, business PIN, invoice prefix, tax-inclusive pricing, and completion mode. Client secrets are encrypted before storage and are never returned to the browser.
+
+Disabling eTIMS does not delete DukaOS sales, receipts, or historical invoice records. It prevents new submissions and leaves normal POS behavior available.
+
+The operational dashboard is **Tax & Compliance -> eTIMS**. It is tenant-scoped and shows total, pending, submitted, accepted, failed, and rejected invoice records. Authorized users can retry failed or rejected submissions. Important enable/disable, configuration, and retry events are written to the audit log.
+
+Before production use, the business must complete KRA/provider onboarding and supply the official technical adapter contract. The current adapter intentionally returns a clear configuration error rather than claiming an invoice is KRA/eTIMS compliant without an accepted official response.
+
 ## 11. Customer and returns workflow
 
 Customers can be created and selected during a sale. Customer payments can be recorded against outstanding credit.
@@ -425,6 +479,8 @@ Why       reason or reference?
 
 Examples include organization registration, branch creation, user changes, product price changes, inventory adjustments, sale creation, voids, refunds, and other sensitive operations as their modules are implemented.
 
+eTIMS-specific audit actions include enabling/disabling the module, configuration updates, queue failures, and retry initiation. Secrets and raw credentials must never be included in audit metadata.
+
 ## 16. Data integrity rules
 
 The following rules define the system's operating model:
@@ -460,6 +516,12 @@ Important permission examples include:
 - `PURCHASE_CREATE`
 - `CUSTOMERS_VIEW`
 - `CASH_SESSION_CLOSE`
+- `ETIMS_VIEW`
+- `ETIMS_CONFIGURE`
+- `ETIMS_SUBMIT`
+- `ETIMS_RETRY`
+- `ETIMS_CANCEL`
+- `ETIMS_EXPORT`
 - `BRANCHES_MANAGE`
 - `USERS_MANAGE`
 - `AUDIT_LOG_VIEW`
@@ -484,6 +546,8 @@ New business functionality follows this order:
 12. Run `npm run lint`.
 13. Run `npm run test`.
 
+For eTIMS specifically, validate the disabled organization path first, then test tax calculation, idempotent queue creation, retry state transitions, tenant filtering, and the distinction between internal DukaOS receipts and officially accepted eTIMS invoices.
+
 A feature should be marked as planned or partial when its data model exists without the complete server action, transaction behavior, UI, authorization, and tests.
 
 ## 19. Local setup and operations
@@ -495,6 +559,7 @@ Prerequisites:
 - `DATABASE_URL`
 - `DIRECT_URL`
 - `AUTH_SECRET`
+- Optional eTIMS deployments also use `ETIMS_ENABLED`, `ETIMS_API_URL`, `ETIMS_CLIENT_ID`, `ETIMS_CLIENT_SECRET`, `ETIMS_ENVIRONMENT`, and `ETIMS_ENCRYPTION_KEY`. Keep these server-only and do not prefix them with `NEXT_PUBLIC_`.
 
 Typical setup:
 
@@ -533,6 +598,9 @@ Production deployments use Vercel with a pooled runtime database URL and a direc
 | FIFO calculation | `src/lib/inventory/fifo.ts` |
 | Purchasing | `src/app/(dashboard)/dashboard/purchases/`, `src/app/actions/purchases.ts` |
 | POS | `src/app/(dashboard)/dashboard/pos/`, `src/app/actions/sales.ts` |
+| eTIMS settings | `src/app/(dashboard)/dashboard/settings/etims-form.tsx`, `src/app/actions/settings.ts` |
+| eTIMS dashboard | `src/app/(dashboard)/dashboard/tax-compliance/etims/`, `src/app/actions/etims.ts` |
+| eTIMS service layer | `src/lib/etims/`, `src/server/services/etims-encryption.ts` |
 | Customers and returns | `src/app/actions/customers.ts` |
 | Reports | `src/app/(dashboard)/dashboard/reports/` |
 | Audit | `src/server/services/audit.ts` |

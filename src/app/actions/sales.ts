@@ -37,6 +37,7 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
     await assertSubscriptionActive(ctx);
     const parsed = saleSchema.safeParse(raw); if (!parsed.success) return { ok: false, error: "Add products and choose a payment method.", fieldErrors: parsed.error.flatten().fieldErrors };
     const input = parsed.data; assertBranchAccess(ctx, input.branchId);
+    const etimsConfiguration = await ctx.db.etimsConfiguration.findUnique({ where: { organizationId: ctx.organizationId } });
     const payments = input.payments?.length ? input.payments : [{ method: input.paymentMethod, amount: input.amountPaid }];
     if (payments.some((payment) => payment.method === "CREDIT")) await assertFeature(ctx, "creditSales");
     const cashPaid = payments.filter((payment) => payment.method !== "CREDIT").reduce((sum, payment) => sum.plus(payment.amount), new Decimal(0));
@@ -47,12 +48,14 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
     if (!branch || !register || !warehouse) return { ok: false, error: "Branch, register, or warehouse not found." };
     if (!ctx.isOwner && await ctx.db.registerAssignment.count({ where: { userId: ctx.userId } }) > 0 && !(await ctx.db.registerAssignment.findFirst({ where: { userId: ctx.userId, registerId: register.id } }))) return { ok: false, error: "You are not assigned to this register." };
     if (input.customerId && !(await ctx.db.customer.findFirst({ where: { id: input.customerId, organizationId: ctx.organizationId } }))) return { ok: false, error: "Customer not found." };
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true, organizationId: ctx.organizationId } }, include: { product: true } });
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.items.map((item) => item.variantId) }, isActive: true, product: { isActive: true, organizationId: ctx.organizationId } }, include: { product: true, taxRate: true } });
     if (variants.length !== input.items.length) return { ok: false, error: "One or more products were not found." };
-    const lines = input.items.map((item) => { const variant = variants.find((candidate) => candidate.id === item.variantId)!; const quantity = new Decimal(item.quantity); const price = new Decimal(variant.sellingPrice.toString()); return { ...item, quantity, price, total: quantity.times(price), variant }; });
+    const lines = input.items.map((item) => { const variant = variants.find((candidate) => candidate.id === item.variantId)!; const quantity = new Decimal(item.quantity); const price = new Decimal(variant.sellingPrice.toString()); const gross = quantity.times(price); const taxRate = new Decimal(variant.taxRate?.rate.toString() ?? "0"); const tax = etimsConfiguration?.taxInclusive !== false ? gross.minus(gross.dividedBy(taxRate.plus(100)).times(100)) : gross.times(taxRate).dividedBy(100); return { ...item, quantity, price, total: etimsConfiguration?.taxInclusive !== false ? gross : gross.plus(tax), tax, taxRate, variant }; });
     const subtotal = lines.reduce((sum, line) => sum.plus(line.total), new Decimal(0));
+    const taxTotal = lines.reduce((sum, line) => sum.plus(line.tax), new Decimal(0));
     const finalPaymentValidation = validateSalePayments({ total: subtotal.toFixed(2), paymentMethod: input.paymentMethod, payments });
     if (!finalPaymentValidation.ok) return { ok: false, error: finalPaymentValidation.error };
+    if (etimsConfiguration?.enabled && etimsConfiguration.completionMode === "BLOCK_COMPLETION") return { ok: false, error: "Block-completion mode requires the official KRA eTIMS adapter to be installed and verified." };
     const sale = await ctx.db.$transaction(async (tx) => {
       let cogs = new Decimal(0);
       const saleItems = [];
@@ -60,7 +63,7 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
         const consumed = await decreaseStock(tx as unknown as Prisma.TransactionClient, { organizationId: ctx.organizationId, warehouseId: warehouse.id, variantId: line.variantId, quantity: line.quantity, type: "SALE", referenceType: "Sale", createdById: ctx.userId });
         const unitCost = consumed.totalConsumed.isZero() ? new Decimal(0) : consumed.totalCost.div(consumed.totalConsumed);
         cogs = cogs.plus(consumed.totalCost);
-        saleItems.push({ variantId: line.variantId, productNameSnapshot: line.variant.product.name, variantNameSnapshot: line.variant.name, skuSnapshot: line.variant.sku, quantity: line.quantity.toString(), unitPrice: line.price.toString(), unitCost: unitCost.toString(), total: line.total.toString() });
+        saleItems.push({ variantId: line.variantId, productNameSnapshot: line.variant.product.name, variantNameSnapshot: line.variant.name, skuSnapshot: line.variant.sku, quantity: line.quantity.toString(), unitPrice: line.price.toString(), taxAmount: line.tax.toFixed(2), unitCost: unitCost.toString(), total: line.total.toString() });
       }
       if (input.customerId && payments.some((payment) => payment.method === "CREDIT")) {
         const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: ctx.organizationId } });
@@ -68,10 +71,16 @@ export async function createSale(raw: unknown): Promise<ActionResult<{ id: strin
       }
       const session = await tx.cashSession.findFirst({ where: { registerId: register.id, branchId: branch.id, organizationId: ctx.organizationId, status: "OPEN" } });
       if (!session) throw new Error("Open the register before completing a sale.");
-      const created = await tx.sale.create({ data: { organizationId: ctx.organizationId, branchId: branch.id, registerId: register.id, cashierId: ctx.userId, cashSessionId: session?.id, receiptNumber: `R-${Date.now()}`, subtotal: subtotal.toFixed(2), total: subtotal.toFixed(2), cogsTotal: cogs.toFixed(2), amountPaid: cashPaid.toFixed(2), changeGiven: Decimal.max(cashPaid.minus(subtotal), 0).toFixed(2), isCreditSale: payments.some((payment) => payment.method === "CREDIT"), customerId: input.customerId || null, items: { create: saleItems }, payments: { create: payments.map((payment) => ({ organizationId: ctx.organizationId, method: payment.method, amount: payment.amount })) } } });
+      const created = await tx.sale.create({ data: { organizationId: ctx.organizationId, branchId: branch.id, registerId: register.id, cashierId: ctx.userId, cashSessionId: session?.id, receiptNumber: `R-${Date.now()}`, subtotal: subtotal.toFixed(2), taxTotal: taxTotal.toFixed(2), total: subtotal.toFixed(2), cogsTotal: cogs.toFixed(2), amountPaid: cashPaid.toFixed(2), changeGiven: Decimal.max(cashPaid.minus(subtotal), 0).toFixed(2), isCreditSale: payments.some((payment) => payment.method === "CREDIT"), customerId: input.customerId || null, items: { create: saleItems }, payments: { create: payments.map((payment) => ({ organizationId: ctx.organizationId, method: payment.method, amount: payment.amount })) } } });
       if (session && cashPaid.gt(0)) await tx.cashMovement.create({ data: { cashSessionId: session.id, type: "SALE", amount: cashPaid.toFixed(2), referenceType: "Sale", referenceId: created.id } });
       return created;
     }, { maxWait: 20000, timeout: 60000 });
+    if (etimsConfiguration?.enabled && etimsConfiguration.completionMode === "QUEUE_FOR_SYNC") {
+      try {
+        const etimsInvoice = await ctx.db.etimsInvoice.create({ data: { organizationId: ctx.organizationId, branchId: sale.branchId, saleId: sale.id, invoiceNumber: `${etimsConfiguration.invoicePrefix ?? "ET"}-${sale.receiptNumber}`, status: "PENDING", subtotal: subtotal.toFixed(2), taxTotal: taxTotal.toFixed(2), total: subtotal.toFixed(2), payload: { invoiceNumber: sale.receiptNumber, saleId: sale.id, organizationId: ctx.organizationId, branchId: sale.branchId, businessPin: etimsConfiguration.businessPin, subtotal: subtotal.toFixed(2), taxTotal: taxTotal.toFixed(2), total: subtotal.toFixed(2), items: lines.map((line) => ({ description: line.variant.product.name, sku: line.variant.sku, quantity: line.quantity.toString(), unitPrice: line.price.toString(), taxRate: line.taxRate.toString(), taxAmount: line.tax.toFixed(2), total: line.total.toFixed(2) })) } } });
+        await ctx.db.etimsSubmission.create({ data: { organizationId: ctx.organizationId, etimsInvoiceId: etimsInvoice.id, idempotencyKey: `sale:${sale.id}`, status: "PENDING" } });
+      } catch (error) { await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "ETIMS_QUEUE_FAILED", entityType: "Sale", entityId: sale.id, metadata: { error: error instanceof Error ? error.message : "Unknown queue error" } }); }
+    }
     await recordAudit({ organizationId: ctx.organizationId, userId: ctx.userId, action: "SALE_CREATED", entityType: "Sale", entityId: sale.id, metadata: { total: subtotal.toFixed(2) } });
     revalidatePath("/dashboard/pos"); revalidatePath("/dashboard"); revalidatePath("/dashboard/reports"); revalidatePath("/dashboard/inventory"); return { ok: true, data: { id: sale.id } };
   } catch (e) { if (e instanceof AuthError) return { ok: false, error: e.message }; return { ok: false, error: e instanceof Error ? e.message : "Could not complete sale." }; }

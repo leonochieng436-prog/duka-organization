@@ -32,6 +32,9 @@ model Organization {
   brands               Brand[]
   categories           Category[]
   customers            Customer[]
+  etimsConfiguration   EtimsConfiguration?
+  etimsInvoices        EtimsInvoice[]
+  etimsSubmissions     EtimsSubmission[]
   expenseCategories    ExpenseCategory[]
   expenses             Expense[]
   inventoryItems       InventoryItem[]
@@ -73,6 +76,7 @@ model Branch {
   updatedAt           DateTime             @updatedAt
   organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   cashSessions        CashSession[]
+  etimsInvoices       EtimsInvoice[]
   expenses            Expense[]
   mpesaPaymentIntents MpesaPaymentIntent[]
   paymentAccounts     PaymentAccount[]
@@ -837,33 +841,35 @@ model CustomerPayment {
 }
 
 model Invoice {
-  id                   String            @id @default(cuid())
+  id                   String              @id @default(cuid())
   organizationId       String
   customerId           String
   invoiceNumber        String
-  status               InvoiceStatus     @default(DRAFT)
-  issueDate            DateTime          @default(now())
+  status               InvoiceStatus       @default(DRAFT)
+  issueDate            DateTime            @default(now())
   dueDate              DateTime
-  currency             String            @default("KES")
-  subtotal             Decimal           @db.Decimal(14, 2)
-  discountTotal        Decimal           @default(0) @db.Decimal(14, 2)
-  taxTotal             Decimal           @default(0) @db.Decimal(14, 2)
-  total                Decimal           @db.Decimal(14, 2)
-  amountPaid           Decimal           @default(0) @db.Decimal(14, 2)
-  amountDue            Decimal           @db.Decimal(14, 2)
+  currency             String              @default("KES")
+  subtotal             Decimal             @db.Decimal(14, 2)
+  discountTotal        Decimal             @default(0) @db.Decimal(14, 2)
+  taxTotal             Decimal             @default(0) @db.Decimal(14, 2)
+  total                Decimal             @db.Decimal(14, 2)
+  amountPaid           Decimal             @default(0) @db.Decimal(14, 2)
+  amountDue            Decimal             @db.Decimal(14, 2)
   notes                String?
   paymentInstructions  String?
-  publicToken          String            @unique
+  publicToken          String              @unique
   publicTokenRevokedAt DateTime?
   pdfKey               String?
   voidedAt             DateTime?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  documentType         InvoiceDocumentType @default(STANDARD_DUKAOS_RECEIPT)
+  etimsInvoice         EtimsInvoice?
   activities           InvoiceActivity[]
   items                InvoiceItem[]
   payments             InvoicePayment[]
-  customer             Customer          @relation(fields: [customerId], references: [id])
-  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer             Customer            @relation(fields: [customerId], references: [id])
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -990,6 +996,7 @@ model Sale {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   customerPayments    CustomerPayment[]
+  etimsInvoice        EtimsInvoice?
   mpesaPaymentIntents MpesaPaymentIntent[]
   payments            Payment[]
   items               SaleItem[]
@@ -1005,6 +1012,94 @@ model Sale {
   @@index([organizationId, branchId, createdAt])
   @@index([organizationId, status])
   @@map("sales")
+}
+
+model EtimsConfiguration {
+  id              String             @id @default(cuid())
+  organizationId  String             @unique
+  enabled         Boolean            @default(false)
+  status          EtimsStatus        @default(DISABLED)
+  completionMode  SaleCompletionMode @default(QUEUE_FOR_SYNC)
+  environment     String?
+  apiUrl          String?
+  clientId        String?
+  encryptedSecret String?
+  businessPin     String?
+  invoicePrefix   String?
+  taxInclusive    Boolean            @default(true)
+  lastError       String?
+  lastConnectedAt DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("etims_configurations")
+}
+
+model EtimsInvoice {
+  id             String             @id @default(cuid())
+  organizationId String
+  branchId       String
+  saleId         String?            @unique
+  invoiceId      String?            @unique
+  invoiceNumber  String
+  status         EtimsInvoiceStatus @default(NOT_REQUIRED)
+  subtotal       Decimal            @db.Decimal(14, 2)
+  taxTotal       Decimal            @db.Decimal(14, 2)
+  total          Decimal            @db.Decimal(14, 2)
+  payload        Json
+  etimsReference String?
+  response       Json?
+  lastError      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  branch         Branch             @relation(fields: [branchId], references: [id], onDelete: NoAction)
+  invoice        Invoice?           @relation(fields: [invoiceId], references: [id])
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sale           Sale?              @relation(fields: [saleId], references: [id])
+  submissions    EtimsSubmission[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, branchId, createdAt])
+  @@map("etims_invoices")
+}
+
+model EtimsSubmission {
+  id             String                @id @default(cuid())
+  organizationId String
+  etimsInvoiceId String
+  idempotencyKey String                @unique
+  status         EtimsSubmissionStatus @default(PENDING)
+  attemptCount   Int                   @default(0)
+  lastAttemptAt  DateTime?
+  nextRetryAt    DateTime?
+  submittedAt    DateTime?
+  responseRef    String?
+  errorMessage   String?
+  response       Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  etimsInvoice   EtimsInvoice          @relation(fields: [etimsInvoiceId], references: [id], onDelete: Cascade)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attempts       EtimsSyncAttempt[]
+
+  @@index([organizationId, status, nextRetryAt])
+  @@map("etims_submissions")
+}
+
+model EtimsSyncAttempt {
+  id            String                @id @default(cuid())
+  submissionId  String
+  attemptNumber Int
+  status        EtimsSubmissionStatus
+  errorMessage  String?
+  response      Json?
+  createdAt     DateTime              @default(now())
+  submission    EtimsSubmission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, attemptNumber])
+  @@map("etims_sync_attempts")
 }
 
 model SaleItem {
@@ -1352,6 +1447,43 @@ enum InvoiceStatus {
   OVERDUE
   VOID
   CANCELLED
+}
+
+enum InvoiceDocumentType {
+  STANDARD_DUKAOS_RECEIPT
+  ETIMS_TAX_INVOICE
+}
+
+enum EtimsStatus {
+  DISABLED
+  ENABLED
+  CONFIGURING
+  CONNECTED
+  ERROR
+}
+
+enum SaleCompletionMode {
+  NORMAL
+  QUEUE_FOR_SYNC
+  BLOCK_COMPLETION
+}
+
+enum EtimsInvoiceStatus {
+  NOT_REQUIRED
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  FAILED
+  CANCELLED
+}
+
+enum EtimsSubmissionStatus {
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  FAILED
 }
 
 enum InvoicePaymentMethod {

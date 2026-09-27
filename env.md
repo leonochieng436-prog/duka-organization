@@ -18,6 +18,16 @@ M_PESA_SHORTCODE=""
 M_PESA_CALLBACK_URL=""
 MPESA_CALLBACK_SECRET=""
 
+# ── eTIMS adapter (optional, server-only) ─────────────────
+# The official KRA adapter contract must be supplied before production use.
+ETIMS_ENABLED="false"
+ETIMS_API_URL=""
+ETIMS_API_KEY=""
+ETIMS_CLIENT_ID=""
+ETIMS_CLIENT_SECRET=""
+ETIMS_ENVIRONMENT="SANDBOX"
+ETIMS_ENCRYPTION_KEY=""
+
 # ── Messaging ─────────────────────────────────────────────
 EMAIL_API_KEY=""
 CONTACT_TO_EMAIL="leonochieng436@gmail.com"
