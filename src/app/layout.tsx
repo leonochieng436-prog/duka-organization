@@ -45,6 +45,9 @@ export const metadata: Metadata = {
   authors: [{ name: "DukaOS" }],
   creator: "DukaOS",
   publisher: "DukaOS",
+  verification: {
+    google: "9yUtOp4x4_dyRzn_RLhsCLNsI2W8O-43j6Kr6iWFIAY",
+  },
   alternates: {
     canonical: "/",
   },
