@@ -56,7 +56,6 @@ export function MobileDashboardNav({ items }: { items: DashboardNavItem[] }) {
               <button
                 type="submit"
                 className="flex w-full items-center justify-between rounded-[var(--radius-md)] border border-border px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
-                onClick={() => setOpen(false)}
               >
                 <span>Log out</span>
                 <LogOut size={16} />
