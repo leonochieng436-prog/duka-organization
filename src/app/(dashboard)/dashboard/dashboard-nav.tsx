@@ -1,0 +1,83 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  BarChart3,
+  Boxes,
+  DollarSign,
+  FileText,
+  LayoutDashboard,
+  LockKeyhole,
+  Package,
+  Settings,
+  ShoppingCart,
+  Truck,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+export type DashboardNavItem = {
+  href: string;
+  label: string;
+  icon: keyof typeof ICONS;
+  children?: { href: string; label: string }[];
+  locked?: boolean;
+};
+
+const ICONS = {
+  dashboard: LayoutDashboard,
+  pos: ShoppingCart,
+  sales: DollarSign,
+  products: Package,
+  inventory: Boxes,
+  purchases: Truck,
+  customers: Users,
+  expenses: Wallet,
+  reports: BarChart3,
+  billing: Wallet,
+  invoices: FileText,
+  settings: Settings,
+  transfers: Truck,
+} as const;
+
+export function DashboardNav({ items, onNavigate }: { items: DashboardNavItem[]; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  return (
+    <nav className="space-y-1">
+      {items.map((item) => {
+        const [itemPath, itemQuery] = item.href.split("?");
+        const itemSection = itemQuery ? new URLSearchParams(itemQuery).get("section") : null;
+        const active = !item.locked && (itemPath === "/dashboard"
+          ? pathname === itemPath
+          : pathname.startsWith(itemPath) && (itemSection ? searchParams.get("section") === itemSection : !searchParams.get("section")));
+        const Icon = ICONS[item.icon];
+        const destination = item.locked ? "/dashboard/billing" : item.href;
+        return (
+          <div key={item.href}>
+            <Link
+              href={destination}
+              onClick={onNavigate}
+              className={cn(
+                "group flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2.5 text-sm transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-[0_5px_14px_rgba(15,123,108,0.18)]"
+                  : "text-foreground/70 hover:bg-surface-muted hover:text-foreground"
+              )}
+            >
+              <Icon size={17} strokeWidth={active ? 2.4 : 2} className={active ? "" : "text-muted-foreground group-hover:text-primary"} />
+              <span className="flex-1">{item.label}</span>
+              {item.locked && <LockKeyhole size={14} className="text-muted-foreground" aria-label="Available on a higher plan" />}
+            </Link>
+            {active && item.children && <div className="ml-8 mt-1 space-y-0.5 border-l border-border pl-3">
+              {item.children.map((child) => <Link key={child.href} href={child.href} onClick={onNavigate} className="block rounded px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-surface-muted hover:text-foreground">{child.label}</Link>)}
+            </div>}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}

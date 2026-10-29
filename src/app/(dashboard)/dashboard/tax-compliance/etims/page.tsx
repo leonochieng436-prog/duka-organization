@@ -1,0 +1,23 @@
+import { FileCheck2, RefreshCw, Send, XCircle } from "lucide-react";
+import { requireAuthContext, assertPermission } from "@/server/auth/context";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { retryEtimsSubmissionForm } from "@/app/actions/etims";
+
+const statusStyle: Record<string, string> = { PENDING: "text-warning", SUBMITTED: "text-primary", ACCEPTED: "text-success", REJECTED: "text-danger", FAILED: "text-danger", CANCELLED: "text-muted-foreground" };
+
+export default async function EtimsDashboardPage() {
+  const ctx = await requireAuthContext();
+  assertPermission(ctx, "ETIMS_VIEW");
+  const [configuration, invoices] = await Promise.all([
+    ctx.db.etimsConfiguration.findUnique({ where: { organizationId: ctx.organizationId } }),
+    ctx.db.etimsInvoice.findMany({ where: {}, include: { branch: true, submissions: true }, orderBy: { createdAt: "desc" }, take: 100 }),
+  ]);
+  const count = (status: string) => invoices.filter((invoice) => invoice.status === status).length;
+  const total = invoices.reduce((sum, invoice) => sum + Number(invoice.total), 0);
+  const kpis: Array<{ label: string; value: number; icon: typeof FileCheck2 }> = [{ label: "Total invoices", value: invoices.length, icon: FileCheck2 }, { label: "Pending", value: count("PENDING"), icon: RefreshCw }, { label: "Submitted", value: count("SUBMITTED"), icon: Send }, { label: "Accepted", value: count("ACCEPTED"), icon: FileCheck2 }, { label: "Failed / rejected", value: count("FAILED") + count("REJECTED"), icon: XCircle }];
+  return <div className="space-y-7"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Tax & Compliance</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">eTIMS invoices</h1><p className="mt-1 text-sm text-muted-foreground">Internal DukaOS invoice records and their official submission status.</p></div><span className={configuration?.enabled ? "rounded-full bg-success-tint px-3 py-1 text-xs font-medium text-success" : "rounded-full bg-surface-muted px-3 py-1 text-xs text-muted-foreground"}>{configuration?.enabled ? configuration.status : "Disabled"}</span></div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{kpis.map(({ label, value, icon: Icon }) => <Card key={label}><CardContent className="p-4"><Icon size={17} className="text-primary" /><p className="mt-4 text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold font-tabular">{value}</p></CardContent></Card>)}</div>
+    <Card><CardHeader><CardTitle>Submission queue</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b border-border text-xs text-muted-foreground"><th className="px-3 py-3">Invoice no.</th><th className="px-3 py-3">Branch</th><th className="px-3 py-3">Amount</th><th className="px-3 py-3">Tax</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">eTIMS ref</th><th className="px-3 py-3">Date</th><th className="px-3 py-3">Action</th></tr></thead><tbody>{invoices.map((invoice) => { const submission = invoice.submissions[0]; return <tr key={invoice.id} className="border-b border-border last:border-0"><td className="px-3 py-3 font-medium">{invoice.invoiceNumber}</td><td className="px-3 py-3">{invoice.branch.name}</td><td className="px-3 py-3 font-tabular">KES {Number(invoice.total).toFixed(2)}</td><td className="px-3 py-3 font-tabular">KES {Number(invoice.taxTotal).toFixed(2)}</td><td className={`px-3 py-3 font-medium ${statusStyle[invoice.status] ?? ""}`}>{invoice.status}</td><td className="px-3 py-3 text-muted-foreground">{invoice.etimsReference ?? "-"}</td><td className="px-3 py-3 text-muted-foreground">{invoice.createdAt.toLocaleDateString("en-KE")}</td><td className="px-3 py-3">{submission && (invoice.status === "FAILED" || invoice.status === "REJECTED") ? <form action={retryEtimsSubmissionForm}><input type="hidden" name="submissionId" value={submission.id} /><Button type="submit" variant="secondary" size="sm">Retry</Button></form> : "-"}</td></tr>; })}</tbody></table>{invoices.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">No eTIMS invoices have been queued. DukaOS sales remain available while the module is disabled.</p>}</div></CardContent></Card><p className="text-xs text-muted-foreground">Total value: KES {total.toFixed(2)}. A document is not presented as KRA/eTIMS compliant until the configured official adapter returns an accepted response.</p>
+  </div>;
+}
