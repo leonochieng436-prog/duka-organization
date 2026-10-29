@@ -36,9 +36,8 @@
    - `DATABASE_URL`, `DIRECT_URL`
    - `AUTH_SECRET` (generate with `openssl rand -base64 32`)
    - `NEXT_PUBLIC_APP_URL` (your production domain)
-   - `RESEND_API_KEY` and a verified `EMAIL_FROM` sender for contact enquiry
-     notifications and password-reset emails; optionally set `CONTACT_TO_EMAIL` to
-     override the enquiry recipient (defaults to the DukaOS contact email).
+   - `RESEND_API_KEY` and a verified `EMAIL_FROM` sender for password-reset
+     emails and other email notifications.
    - M-Pesa credentials and `MPESA_CALLBACK_SECRET` once the callback
      adapter is enabled; SMS, WhatsApp API and storage credentials when
      those integrations are configured.

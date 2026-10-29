@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { rawPrisma } from "@/server/db/client";
-import { brandedEmail, escapeHtml, sendEmail } from "@/server/services/messaging";
 
 const contactSchema = z.object({
   fullName: z.string().trim().min(2, "Please enter your full name.").max(120),
@@ -17,28 +16,31 @@ const contactSchema = z.object({
   message: z.string().trim().min(10, "Please share a few more details about your needs.").max(5000),
 });
 
-function resolveContactRecipient(): string {
-  const explicitRecipient = process.env.CONTACT_TO_EMAIL?.trim();
-  if (explicitRecipient) return explicitRecipient;
-
-  const envFrom = process.env.EMAIL_FROM?.trim();
-  if (envFrom) {
-    const match = envFrom.match(/<([^>]+)>/);
-    if (match?.[1]?.trim()) return match[1].trim();
-    const bareEmail = envFrom.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-    if (bareEmail) return bareEmail;
-  }
-
-  return "leonochieng436@gmail.com";
-}
-
 export async function submitContactEnquiry(raw: unknown) {
   const parsed = contactSchema.safeParse(raw);
   if (!parsed.success) {
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const fieldLabels: Record<string, string> = {
+      fullName: "Full name",
+      businessName: "Business name",
+      email: "Email address",
+      phone: "Phone number",
+      businessType: "Business type",
+      numberOfLocations: "Number of locations",
+      currentSystem: "Current POS / business system",
+      interest: "Interest",
+      message: "Message",
+    };
+    const invalidFields = Object.keys(fieldErrors)
+      .map((field) => fieldLabels[field] ?? field)
+      .join(", ");
+
     return {
       ok: false as const,
-      error: "Please fix the highlighted fields and try again.",
-      fieldErrors: parsed.error.flatten().fieldErrors,
+      error: invalidFields
+        ? `Please check ${invalidFields} and try again.`
+        : "Please review your enquiry and try again.",
+      fieldErrors,
     };
   }
 
@@ -74,59 +76,8 @@ export async function submitContactEnquiry(raw: unknown) {
     };
   }
 
-  let warning: string | undefined;
-  try {
-    const body = `
-      Full name: ${input.fullName}
-      Business name: ${input.businessName}
-      Email: ${input.email}
-      Phone: ${input.phone}
-      Business type: ${input.businessType || "Not specified"}
-      Number of locations: ${input.numberOfLocations || "Not specified"}
-      Current POS / business system: ${input.currentSystem || "Not specified"}
-      Interest: ${input.interest || "Not specified"}
-
-      Message:
-      ${input.message}
-    `;
-
-    const to = resolveContactRecipient();
-
-    await sendEmail({
-      recipient: to,
-      subject: `New DukaOS enquiry from ${input.businessName}`,
-      message: body,
-      html: brandedEmail({
-        preheader: `New enquiry from ${input.fullName}`,
-        eyebrow: "New enquiry",
-        title: "A new business enquiry has arrived",
-        body: `
-          <p><strong>Name:</strong> ${escapeHtml(input.fullName)}</p>
-          <p><strong>Business:</strong> ${escapeHtml(input.businessName)}</p>
-          <p><strong>Email:</strong> ${escapeHtml(input.email)}</p>
-          <p><strong>Phone:</strong> ${escapeHtml(input.phone)}</p>
-          <p><strong>Business type:</strong> ${escapeHtml(input.businessType || "Not specified")}</p>
-          <p><strong>Locations:</strong> ${escapeHtml(input.numberOfLocations || "Not specified")}</p>
-          <p><strong>Current system:</strong> ${escapeHtml(input.currentSystem || "Not specified")}</p>
-          <p><strong>Interest:</strong> ${escapeHtml(input.interest || "Not specified")}</p>
-          <p><strong>Message:</strong></p>
-          <p>${escapeHtml(input.message).replace(/\n/g, "<br>")}</p>
-        `,
-        cta: {
-          label: "Open DukaOS",
-          url: process.env.NEXT_PUBLIC_APP_URL ?? "https://dukaos-organization.vercel.app",
-        },
-      }),
-      replyTo: input.email,
-    });
-  } catch (error) {
-    console.error("CONTACT_ENQUIRY_ERROR", error);
-    warning = "Our email notification could not be sent, but your enquiry is saved and visible to our team.";
-  }
-
   return {
     ok: true as const,
-    message: "Thanks for contacting DukaOS. Your enquiry is saved and our team will get back to you.",
-    ...(warning ? { warning } : {}),
+    message: "Your enquiry is saved. WhatsApp is opening with your message—press Send there to deliver it to DukaOS.",
   };
 }

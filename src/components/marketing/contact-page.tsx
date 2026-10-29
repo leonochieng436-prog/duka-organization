@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -47,65 +47,93 @@ const initialState = {
   ok: false as boolean,
   error: "",
   message: "",
-  warning: "",
   fieldErrors: {} as Record<string, string[]>,
 };
 
 export function ContactPageContent() {
+  const [isPending, startTransition] = useTransition();
+  const [state, setState] = useState(initialState);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalTab>("privacy");
   const [whatsappUrl, setWhatsappUrl] = useState("");
-  const [state, formAction, isPending] = useActionState(
-    async (_previousState: typeof initialState, formData: FormData) => {
-      const payload = {
-        fullName: String(formData.get("fullName") ?? ""),
-        businessName: String(formData.get("businessName") ?? ""),
-        email: String(formData.get("email") ?? ""),
-        phone: String(formData.get("phone") ?? ""),
-        businessType: String(formData.get("businessType") ?? ""),
-        numberOfLocations: String(formData.get("numberOfLocations") ?? ""),
-        currentSystem: String(formData.get("currentSystem") ?? ""),
-        interest: String(formData.get("interest") ?? ""),
-        message: String(formData.get("message") ?? ""),
-      };
 
-      const result = await submitContactEnquiry(payload);
-      if (!result.ok) {
-        setWhatsappUrl("");
-        return {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!form.reportValidity()) return;
+
+    const formData = new FormData(form);
+    const payload = {
+      fullName: String(formData.get("fullName") ?? ""),
+      businessName: String(formData.get("businessName") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      phone: String(formData.get("phone") ?? ""),
+      businessType: String(formData.get("businessType") ?? ""),
+      numberOfLocations: String(formData.get("numberOfLocations") ?? ""),
+      currentSystem: String(formData.get("currentSystem") ?? ""),
+      interest: String(formData.get("interest") ?? ""),
+      message: String(formData.get("message") ?? ""),
+    };
+    const enquiryMessage = [
+      "New DukaOS enquiry",
+      `Full name: ${payload.fullName}`,
+      `Business name: ${payload.businessName}`,
+      `Email: ${payload.email}`,
+      `Phone: ${payload.phone}`,
+      `Business type: ${payload.businessType || "Not specified"}`,
+      `Number of locations: ${payload.numberOfLocations || "Not specified"}`,
+      `Current system: ${payload.currentSystem || "Not specified"}`,
+      `Interest: ${payload.interest || "Not specified"}`,
+      `Message: ${payload.message}`,
+    ].join("\n");
+    const nextWhatsappUrl = `https://wa.me/254757308631?text=${encodeURIComponent(enquiryMessage)}`;
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (whatsappWindow) {
+      whatsappWindow.opener = null;
+      whatsappWindow.document.title = "Opening DukaOS on WhatsApp";
+      whatsappWindow.document.body.textContent = "Saving your enquiry, then opening WhatsApp…";
+    }
+
+    setState(initialState);
+    setWhatsappUrl("");
+    startTransition(async () => {
+      try {
+        const result = await submitContactEnquiry(payload);
+        if (!result.ok) {
+          whatsappWindow?.close();
+          setState({
+            ok: false,
+            error: result.error,
+            message: "",
+            fieldErrors: result.fieldErrors ?? {},
+          });
+          return;
+        }
+
+        setIsSubmitted(true);
+        setWhatsappUrl(nextWhatsappUrl);
+        setState({
+          ok: true,
+          error: "",
+          message: result.message,
+          fieldErrors: {},
+        });
+        if (whatsappWindow) {
+          whatsappWindow.location.href = nextWhatsappUrl;
+        }
+      } catch (error) {
+        console.error("CONTACT_ENQUIRY_SUBMIT_ERROR", error);
+        whatsappWindow?.close();
+        setState({
           ok: false,
-          error: result.error,
+          error: "We couldn't submit your enquiry. Please try again or contact us directly.",
           message: "",
-          warning: "",
-          fieldErrors: result.fieldErrors ?? {},
-        };
+          fieldErrors: {},
+        });
       }
-
-      setIsSubmitted(true);
-      const enquiryMessage = [
-        "New DukaOS enquiry",
-        `Full name: ${payload.fullName}`,
-        `Business name: ${payload.businessName}`,
-        `Email: ${payload.email}`,
-        `Phone: ${payload.phone}`,
-        `Business type: ${payload.businessType || "Not specified"}`,
-        `Number of locations: ${payload.numberOfLocations || "Not specified"}`,
-        `Current system: ${payload.currentSystem || "Not specified"}`,
-        `Interest: ${payload.interest || "Not specified"}`,
-        `Message: ${payload.message}`,
-      ].join("\n");
-      setWhatsappUrl(`https://wa.me/254757308631?text=${encodeURIComponent(enquiryMessage)}`);
-      return {
-        ok: true,
-        error: "",
-        message: result.message,
-        warning: result.warning ?? "",
-        fieldErrors: {},
-      };
-    },
-    initialState,
-  );
+    });
+  }
 
   const fields = useMemo(
     () => [
@@ -205,7 +233,7 @@ export function ContactPageContent() {
               </div>
             </div>
 
-            <form action={formAction} className="rounded-2xl border border-border bg-[#f8faf9] p-5 shadow-sm sm:p-6">
+            <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-[#f8faf9] p-5 shadow-sm sm:p-6">
               <div className="grid gap-5 sm:grid-cols-2">
                 {fields.map((field) => (
                   <label key={field.name} className="block text-sm font-medium text-foreground">
@@ -237,6 +265,9 @@ export function ContactPageContent() {
                     <option>Distribution</option>
                     <option>Other</option>
                   </select>
+                  {state.fieldErrors.businessType?.[0] ? (
+                    <span className="mt-1 block text-[12px] text-danger">{state.fieldErrors.businessType[0]}</span>
+                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-foreground">
@@ -248,11 +279,17 @@ export function ContactPageContent() {
                     <option>6–10</option>
                     <option>11+</option>
                   </select>
+                  {state.fieldErrors.numberOfLocations?.[0] ? (
+                    <span className="mt-1 block text-[12px] text-danger">{state.fieldErrors.numberOfLocations[0]}</span>
+                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-foreground sm:col-span-2">
                   Current POS / Business System
                   <input name="currentSystem" type="text" className="mt-2 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10" placeholder="e.g. manual records, spreadsheet, another POS" />
+                  {state.fieldErrors.currentSystem?.[0] ? (
+                    <span className="mt-1 block text-[12px] text-danger">{state.fieldErrors.currentSystem[0]}</span>
+                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-foreground sm:col-span-2">
@@ -269,6 +306,9 @@ export function ContactPageContent() {
                     <option>Business Management System</option>
                     <option>Other</option>
                   </select>
+                  {state.fieldErrors.interest?.[0] ? (
+                    <span className="mt-1 block text-[12px] text-danger">{state.fieldErrors.interest[0]}</span>
+                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-foreground sm:col-span-2">
@@ -301,9 +341,6 @@ export function ContactPageContent() {
               {state.message ? (
                 <p className="mt-4 text-sm text-success">{state.message}</p>
               ) : null}
-              {state.warning ? (
-                <p className="mt-2 text-sm text-warning">{state.warning}</p>
-              ) : null}
               {whatsappUrl ? (
                 <a
                   href={whatsappUrl}
@@ -312,12 +349,12 @@ export function ContactPageContent() {
                   className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5"
                 >
                   <MessageCircle size={17} />
-                  Send this enquiry via WhatsApp
+                  Open WhatsApp and send enquiry
                 </a>
               ) : null}
 
               {!state.error && isSubmitted && !state.message ? (
-                <p className="mt-4 text-sm text-success">Thanks for contacting DukaOS. We&apos;ve received your enquiry and will get back to you.</p>
+                <p className="mt-4 text-sm text-success">Your enquiry is saved. Press Send in WhatsApp to deliver it to DukaOS.</p>
               ) : null}
             </form>
           </div>
