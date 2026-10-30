@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, ArrowUp, Globe2, Menu, X } from "lucide-react";
 import { type LegalTab } from "@/components/legal-popups";
+import { SocialLinks } from "@/components/marketing/social-links";
 
 const navItems = [
   ["About", "/about"],
@@ -231,13 +232,10 @@ export function MarketingFooter({ onOpenLegal }: { onOpenLegal?: (tab: LegalTab)
             </ul>
             <div className="mt-8">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8de0c1]">Connect with us</p>
-              <div className="mt-4 flex flex-wrap gap-4 text-sm text-emerald-50/75">
-                {['Instagram', 'WhatsApp', 'Facebook', 'LinkedIn'].map((item) => (
-                  <Link key={item} href="#" className="hover:text-white">
-                    {item}
-                  </Link>
-                ))}
-              </div>
+              <SocialLinks
+                className="mt-4 flex flex-wrap gap-4 text-sm text-emerald-50/75"
+                linkClassName="inline-flex items-center gap-2 hover:text-white"
+              />
             </div>
           </div>
         </div>

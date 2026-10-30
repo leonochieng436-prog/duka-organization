@@ -5,13 +5,13 @@ import Link from "next/link";
 import {
   ArrowRight,
   ChevronDown,
-  Globe2,
   Mail,
   Phone,
 } from "lucide-react";
 import { submitContactEnquiry } from "@/app/actions/contact";
 import { LegalModal, type LegalTab } from "@/components/legal-popups";
 import { JsonLdScript, MarketingFooter, MarketingPageHeader, RevealOnScroll, ScrollToTopButton } from "@/components/marketing/page-shell";
+import { SocialLinks } from "@/components/marketing/social-links";
 
 const faqs = [
   ["What is DukaOS?", "DukaOS is a business operating system for sales, inventory, purchases, customers, suppliers, branches, users, and reports in one connected workspace."],
@@ -175,10 +175,10 @@ export function ContactPageContent() {
                   <Phone className="mt-0.5 text-primary" size={18} />
                   <span>+254 757 308 631</span>
                 </a>
-                <div className="flex items-start gap-3">
-                  <Globe2 className="mt-0.5 text-primary" size={18} />
-                  <span>Instagram • Facebook • X • LinkedIn: @DukaOS</span>
-                </div>
+                <SocialLinks
+                  className="flex flex-wrap gap-x-4 gap-y-2"
+                  linkClassName="inline-flex items-center gap-2 hover:text-primary"
+                />
               </div>
             </div>
 
